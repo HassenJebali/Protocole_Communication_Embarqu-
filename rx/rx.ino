@@ -4,7 +4,7 @@
 #include <Adafruit_BMP085.h>
 
 // --------- SoftwareSerial ---------
-SoftwareSerial mySerial(10, 11);  // RX, TX
+SoftwareSerial mySerial(2, 3);  // RX, TX
 
 // --------- LCD 16x2 I2C ---------
 LiquidCrystal_I2C lcd(0x27, 16, 2);

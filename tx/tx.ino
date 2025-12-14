@@ -4,7 +4,7 @@
 #include <SoftwareSerial.h>
 
 // --- SoftwareSerial : TX = 11, RX = 10 ---
-SoftwareSerial mySerial(10, 11); // RX, TX
+SoftwareSerial mySerial(2, 3); // RX, TX
 
 #define DS1621_ADDR 0x48
 #define ACCESS_CONFIG 0xAC
