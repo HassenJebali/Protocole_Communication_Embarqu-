@@ -1,7 +1,11 @@
+///RX avant buzzer modifier
+
+
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <SoftwareSerial.h>
-#include <Adafruit_BMP085.h>
+#include <SD.h>
+#include <SPI.h>
 
 // --------- SoftwareSerial ---------
 SoftwareSerial mySerial(2, 3);  // RX, TX
@@ -9,13 +13,18 @@ SoftwareSerial mySerial(2, 3);  // RX, TX
 // --------- LCD 16x2 I2C ---------
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-const int ledPin = 5;
-const int ledPin0 = 6;
+// --------- SD ---------
+const int chipSelect = 4;
+File dataFile;
 
-String receivedData;
+// --------- LEDs ---------
+const int ledPin = 8;
+const int ledPin0 = 9;
+
+// --------- Variables ---------
 float previousPressure = 0;
-float airflowThreshold = 0.1;  // ΔP en hPa pour détecter le courant d'air
-float tempThreshold = 22.0;
+float airflowThreshold = 0.1;  // hPa
+float tempThreshold = 18.0;
 
 void setup() {
   Serial.begin(9600);
@@ -23,11 +32,38 @@ void setup() {
 
   lcd.init();
   lcd.backlight();
-  lcd.setCursor(0,0);
-  lcd.print("En attente...");
+  lcd.setCursor(0, 0);
+  lcd.print("Init SD...");
 
   pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, LOW);
+  pinMode(ledPin0, OUTPUT);
+
+  // ---------- INIT SD ----------
+  if (!SD.begin(chipSelect)) {
+    lcd.clear();
+    lcd.print("SD FAIL");
+    Serial.println("❌ Carte SD absente !");
+    while (1);
+  }
+
+  lcd.clear();
+  lcd.print("SD OK");
+  delay(1000);
+
+  lcd.clear();
+  lcd.print("En attente...");
+}
+
+// ===== ENREGISTREMENT SD =====
+void saveToSD(String text) {
+  dataFile = SD.open("data.txt", FILE_WRITE);
+  if (dataFile) {
+    dataFile.println(text);
+    dataFile.close();
+    Serial.println("💾 SD: " + text);
+  } else {
+    Serial.println("❌ Erreur ecriture SD");
+  }
 }
 
 void loop() {
@@ -37,7 +73,7 @@ void loop() {
 
     Serial.println("Reçu: " + receivedData);
 
-    // Vérification format attendu : "DS:val,BM:val,P:val"
+    // Format attendu : DS:x,BM:x,P:x
     int dsIndex = receivedData.indexOf("DS:");
     int bmIndex = receivedData.indexOf(",BM:");
     int pIndex  = receivedData.indexOf(",P:");
@@ -46,30 +82,33 @@ void loop() {
       String dsVal = receivedData.substring(dsIndex + 3, bmIndex);
       String bmVal = receivedData.substring(bmIndex + 4, pIndex);
       String pVal  = receivedData.substring(pIndex + 3);
+
       float pressure = pVal.toFloat();
       float tempDS = dsVal.toFloat();
 
-      // Détection courant d'air
+      // ---------- SAUVEGARDE SD ----------
+      saveToSD(receivedData);
+
+      // ---------- DETECTION AIRFLOW ----------
       if (previousPressure != 0 && abs(previousPressure - pressure) >= airflowThreshold) {
         lcd.clear();
-        lcd.setCursor(0,0);
         lcd.print("Courant d'air");
-        digitalWrite(ledPin, HIGH);  // LED rouge ON
-        mySerial.println("ALERTE: AIRFLOW DETECTED!");
+        digitalWrite(ledPin, HIGH);
+        mySerial.println("ALERTE: AIRFLOW!");
         delay(5000);
-        digitalWrite(ledPin, LOW);   // LED rouge OFF
+        digitalWrite(ledPin, LOW);
         lcd.clear();
-      } 
+      }
       previousPressure = pressure;
 
+      // ---------- TEMP ELEVEE ----------
       if (tempDS > tempThreshold) {
         lcd.clear();
-        lcd.setCursor(0,0);
         lcd.print("HIGH TEMP!");
-        lcd.setCursor(0,1);
-        lcd.print(String(tempDS) + " C");
+        lcd.setCursor(0, 1);
+        lcd.print(tempDS, 1);
+        lcd.print(" C");
 
-        // LED clignotante
         for (int i = 0; i < 5; i++) {
           digitalWrite(ledPin0, HIGH);
           delay(300);
@@ -77,48 +116,38 @@ void loop() {
           delay(300);
         }
 
-        mySerial.println("ALERTE: HIGH TEMP! " + String(tempDS) + " C");
+        mySerial.println("ALERTE: TEMP " + String(tempDS, 1));
         lcd.clear();
       }
 
-      // --- Affichage DS1621 ---
-      lcd.setCursor(0,0);
+      // ---------- AFFICHAGE ----------
+      lcd.setCursor(0, 0);
       lcd.print("DS1621:");
-      lcd.setCursor(0,1);
+      lcd.setCursor(0, 1);
       lcd.print(dsVal + " C");
       delay(2000);
 
-      // --- Affichage séparation ---
       lcd.clear();
-      lcd.setCursor(0,0);
       lcd.print("----");
       delay(500);
 
-      // --- Affichage BMP180 ---
       lcd.clear();
-      lcd.setCursor(0,0);
       lcd.print("BMP180:");
-      lcd.setCursor(0,1);
+      lcd.setCursor(0, 1);
       lcd.print(bmVal + " C");
       delay(2000);
 
-      // --- Affichage séparation ---
       lcd.clear();
-      lcd.setCursor(0,0);
       lcd.print("----");
       delay(500);
 
-      // --- Affichage Pression ---
       lcd.clear();
-      lcd.setCursor(0,0);
       lcd.print("Pression:");
-      lcd.setCursor(0,1);
+      lcd.setCursor(0, 1);
       lcd.print(pVal + " hPa");
       delay(2000);
 
-      // --- Affichage séparation finale ---
       lcd.clear();
-      lcd.setCursor(0,0);
       lcd.print("----");
       delay(500);
     }
